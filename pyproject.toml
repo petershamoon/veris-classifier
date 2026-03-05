@@ -1,0 +1,30 @@
+[project]
+name = "veris-classifier"
+version = "0.1.0"
+description = "AI-powered VERIS incident classifier - converts natural language incident reports to structured VERIS taxonomy"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "pshamoon"}]
+dependencies = [
+    "openai>=1.0",
+    "python-dotenv",
+    "datasets",
+    "huggingface-hub",
+    "gradio",
+    "tqdm",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100

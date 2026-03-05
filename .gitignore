@@ -1,0 +1,25 @@
+# Environment & secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+
+# Data (large files — datasets are on HF Hub)
+data/VCDB/
+data/vcdb_raw/
+data/dataset/
+data/autotrain/
+data/evaluation/
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Claude Code
+.claude/
