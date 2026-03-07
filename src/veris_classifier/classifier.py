@@ -33,8 +33,8 @@ QA_SYSTEM_PROMPT = (
 
 # ── HF Model Backend ─────────────────────────────────────────────────────
 
-HF_MODEL_ID = "vibesecurityguy/veris-classifier-v1"   # LoRA adapter repo
-BASE_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"            # Base model
+HF_MODEL_ID = "vibesecurityguy/veris-classifier-v2"   # LoRA adapter repo
+BASE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"   # Base model
 _hf_pipeline = None
 _hf_tokenizer = None
 
@@ -43,7 +43,7 @@ def load_hf_model():
     """Load the base model + LoRA adapter from HF Hub. Called once on first request.
 
     The model repo only contains LoRA adapter weights (162 MB), not a full model.
-    We load the base Qwen2.5-7B-Instruct model, then merge the adapter on top.
+    We load the base Mistral-7B-Instruct model, then merge the adapter on top.
     """
     global _hf_pipeline, _hf_tokenizer
 

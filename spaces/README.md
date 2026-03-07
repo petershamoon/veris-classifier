@@ -10,7 +10,7 @@ pinned: false
 license: mit
 short_description: AI-powered VERIS incident classification
 models:
-  - vibesecurityguy/veris-classifier-v1
+  - vibesecurityguy/veris-classifier-v2
 datasets:
   - vibesecurityguy/veris-classifier-training
   - vibesecurityguy/veris-incident-classifications
@@ -18,21 +18,21 @@ datasets:
 
 # VERIS Incident Classifier
 
-Classify security incidents into the [VERIS framework](https://verisframework.org/) using a fine-tuned Qwen2.5-7B-Instruct model. **No API key required.**
+Classify security incidents into the [VERIS framework](https://verisframework.org/) using a fine-tuned Mistral-7B-Instruct model. **No API key required.**
 
 ## Features
 
 - **Classify Incident** — Describe a security incident in plain English, get a structured VERIS JSON classification
 - **Ask About VERIS** — Ask questions about the VERIS taxonomy, enumerations, and best practices
-- **Free Inference** — Runs on HF ZeroGPU (A10G) at no cost
+- **Free Inference** — Runs on HF ZeroGPU (A10G)
 
 ## Model
 
-Fine-tuned [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) using QLoRA (4-bit quantization) on 10,000+ real security incidents from the [VERIS Community Database](https://github.com/vz-risk/VCDB) plus 300+ VERIS Q&A pairs.
+Fine-tuned [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) using QLoRA (4-bit quantization) on 10,000+ real security incidents from the [VERIS Community Database](https://github.com/vz-risk/VCDB) plus 300+ VERIS Q&A pairs.
 
 ## Links
 
-- [Model](https://huggingface.co/vibesecurityguy/veris-classifier-v1)
+- [Model](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
 - [Training Dataset](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
 - [VERIS Framework](https://verisframework.org/)
-- [Source Code](https://github.com/pshamoon/veris-classifier)
+- [Source Code](https://github.com/petershamoon/veris-classifier)

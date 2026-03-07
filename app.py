@@ -1,7 +1,7 @@
 """VERIS Classifier - Gradio Web Application.
 
 Dual-mode inference:
-- Primary: Fine-tuned Qwen2.5-7B-Instruct on ZeroGPU (no API key needed)
+- Primary: Fine-tuned Mistral-7B-Instruct on ZeroGPU (no API key needed)
 - Fallback: OpenAI API (user provides their own key)
 """
 
@@ -436,7 +436,7 @@ def build_app() -> gr.Blocks:
                 <div class="hero-badges">
                     <span class="hero-badge">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                        Fine-tuned Qwen2.5-7B
+                        Fine-tuned Mistral-7B
                     </span>
                     <span class="hero-badge">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
@@ -483,7 +483,7 @@ def build_app() -> gr.Blocks:
                 </svg>
                 <span>
                     <strong>Model:</strong> Fine-tuned
-                    <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v1" target="_blank" style="color: #34d399;">Qwen2.5-7B-Instruct</a>
+                    <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v2" target="_blank" style="color: #34d399;">Mistral-7B-Instruct</a>
                     on ZeroGPU &mdash; no API key needed!
                 </span>
             </div>
@@ -648,7 +648,7 @@ def build_app() -> gr.Blocks:
                 <div class="about-card">
                     <h3 style="color: #f1f5f9; margin-top: 0;">About This Project</h3>
                     <p style="color: #94a3b8; line-height: 1.7;">
-                        This classifier uses a <strong style="color: #e2e8f0;">fine-tuned Qwen2.5-7B-Instruct</strong> model,
+                        This classifier uses a <strong style="color: #e2e8f0;">fine-tuned Mistral-7B-Instruct</strong> model,
                         trained on <strong style="color: #e2e8f0;">10,000+ real security incidents</strong> from the
                         <a href="https://github.com/vz-risk/VCDB" target="_blank" style="color: #60a5fa;">VERIS Community Database (VCDB)</a>
                         plus 300+ VERIS Q&A pairs. The model was fine-tuned using QLoRA (4-bit quantization)
@@ -658,7 +658,7 @@ def build_app() -> gr.Blocks:
                         <a href="https://verisframework.org/" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 8px 16px; color: #60a5fa; text-decoration: none; font-size: 0.9rem;">VERIS Framework</a>
                         <a href="https://github.com/vz-risk/VCDB" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 8px 16px; color: #a78bfa; text-decoration: none; font-size: 0.9rem;">VCDB GitHub</a>
                         <a href="https://www.verizon.com/business/resources/reports/dbir/" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 8px; padding: 8px 16px; color: #34d399; text-decoration: none; font-size: 0.9rem;">Verizon DBIR</a>
-                        <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v1" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 8px 16px; color: #fbbf24; text-decoration: none; font-size: 0.9rem;">Model on HF</a>
+                        <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v2" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 8px 16px; color: #fbbf24; text-decoration: none; font-size: 0.9rem;">Model on HF</a>
                     </div>
                 </div>
 
@@ -668,7 +668,7 @@ def build_app() -> gr.Blocks:
                         <tbody>
                             <tr style="border-bottom: 1px solid #1e293b;">
                                 <td style="padding: 10px 16px; color: #94a3b8; width: 40%;">Base Model</td>
-                                <td style="padding: 10px 16px; color: #e2e8f0;">Qwen/Qwen2.5-7B-Instruct</td>
+                                <td style="padding: 10px 16px; color: #e2e8f0;">mistralai/Mistral-7B-Instruct-v0.3</td>
                             </tr>
                             <tr style="border-bottom: 1px solid #1e293b;">
                                 <td style="padding: 10px 16px; color: #94a3b8;">Fine-tuning Method</td>
@@ -698,10 +698,10 @@ def build_app() -> gr.Blocks:
         # --- Footer ---
         gr.HTML("""
         <div class="footer">
-            Fine-tuned Qwen2.5-7B-Instruct &middot; VERIS Framework &middot; VCDB &middot; QLoRA
+            Fine-tuned Mistral-7B-Instruct &middot; VERIS Framework &middot; VCDB &middot; QLoRA
             <br>
             <a href="https://github.com/pshamoon/veris-classifier">Source Code</a> &middot;
-            <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v1">Model</a> &middot;
+            <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v2">Model</a> &middot;
             <a href="https://verisframework.org/">VERIS Docs</a> &middot;
             <a href="https://github.com/vz-risk/VCDB">VCDB</a>
         </div>

@@ -88,7 +88,7 @@ def main():
   Deployment complete!
 
   Space URL: https://huggingface.co/spaces/{args.space_id}
-  Model:     vibesecurityguy/veris-classifier-v1
+  Model:     vibesecurityguy/veris-classifier-v2
   Hardware:  ZeroGPU (A10G)
 
   The Space will build and start automatically.

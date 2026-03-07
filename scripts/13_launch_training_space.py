@@ -17,7 +17,7 @@ load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 SPACE_ID = "vibesecurityguy/veris-train"
-MODEL_REPO = "vibesecurityguy/veris-classifier-v1"
+MODEL_REPO = "vibesecurityguy/veris-classifier-v2"
 
 api = HfApi(token=HF_TOKEN)
 
@@ -103,9 +103,9 @@ def create_training_space():
     )
     from trl import SFTTrainer
 
-    BASE_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+    BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
     DATASET_ID = "vibesecurityguy/veris-classifier-training"
-    OUTPUT_REPO = "vibesecurityguy/veris-classifier-v1"
+    OUTPUT_REPO = "vibesecurityguy/veris-classifier-v2"
     HF_TOKEN = os.getenv("HF_TOKEN")
 
     status = "starting"
@@ -345,7 +345,7 @@ def create_training_space():
 
     # VERIS Classifier Training
 
-    Fine-tuning Qwen2.5-7B-Instruct with QLoRA for VERIS incident classification.
+    Fine-tuning Mistral-7B-Instruct-v0.3 with QLoRA for VERIS incident classification.
     Training starts automatically — check container logs for progress.
     ''')
 

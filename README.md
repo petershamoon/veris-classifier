@@ -66,9 +66,9 @@ Converts natural language incident reports into structured VERIS taxonomy — th
                                                                    v
     ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
     │   Gradio App     │<────│  Fine-tuned Model    │<────│  Custom Docker Space│
-    │  ZeroGPU (A10G)  │     │  Qwen2.5-7B-Instruct│     │  trl SFTTrainer     │
+    │  ZeroGPU (A10G)  │     │  Mistral-7B-Instruct│     │  trl SFTTrainer     │
     │  No API key!     │     │  vibesecurityguy/    │     │  QLoRA, 3 epochs    │
-    └─────────────────┘     │  veris-classifier-v1 │     │  A10G GPU           │
+    └─────────────────┘     │  veris-classifier-v2 │     │  A10G GPU           │
                             └──────────────────────┘     └─────────────────────┘
 ```
 
@@ -78,7 +78,7 @@ Converts natural language incident reports into structured VERIS taxonomy — th
 
 | Property | Value |
 |----------|-------|
-| Base Model | [Qwen/Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) |
+| Base Model | [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) |
 | Method | QLoRA (4-bit quantized LoRA, r=16, alpha=32) |
 | Training Data | 10,019 classification + 311 Q&A pairs |
 | Epochs | 3 |
@@ -86,7 +86,7 @@ Converts natural language incident reports into structured VERIS taxonomy — th
 | Learning Rate | 2e-4 with cosine scheduler |
 | Inference | HF ZeroGPU (A10G burst, requires HF Pro $9/mo) |
 
-**Model on HF Hub:** [`vibesecurityguy/veris-classifier-v1`](https://huggingface.co/vibesecurityguy/veris-classifier-v1)
+**Model on HF Hub:** [`vibesecurityguy/veris-classifier-v2`](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
 
 ### Training Dataset
 
@@ -217,7 +217,7 @@ These create **315 possible combinations** (3 x 7 x 5 x 3) in the A4 Grid.
 
 ## Tech Stack
 
-- **Qwen2.5-7B-Instruct** — fine-tuned classification model (QLoRA)
+- **Mistral-7B-Instruct** — fine-tuned classification model (QLoRA)
 - **HuggingFace** — model hosting, dataset hosting, Spaces deployment, ZeroGPU
 - **Gradio** — web interface with dark theme
 - **OpenAI GPT-4o-mini** — synthetic dataset generation

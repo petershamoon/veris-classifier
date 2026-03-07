@@ -41,17 +41,17 @@
 - Training cost: ~$3-5 on HF AutoTrain for 10K examples, 3 epochs
 - The adapters are small enough to share and merge easily
 
-### ChatML Template Matching Matters
-- Qwen2.5 uses ChatML format natively
+### Chat Template Matching Matters
+- Each model family has its own chat template (Mistral, Llama, ChatML, etc.)
 - Training data must match the model's expected chat template exactly
-- AutoTrain has a "chat template" dropdown - set it to "chatml" for Qwen models
+- `tokenizer.apply_chat_template()` auto-detects the correct format — no manual template specification needed
 - Mismatched templates = the model sees garbled input and produces garbage output
 
 ### Model Selection for Structured Output
 - 7B parameters is the sweet spot for JSON-structured classification with 300+ enum values
 - 3B models may lack capacity for the full VERIS enumeration space
 - 8B+ models (Llama 3.1) work but are slightly more expensive to train and serve
-- Qwen2.5 family has particularly good structured output capability
+- Mistral-7B has strong structured output capability and is fully open (Apache 2.0)
 
 ### AutoTrain Gotchas
 - `autotrain-advanced` pip package doesn't build on Python 3.14 (wheel build failures for Pillow, pydantic-core, etc.)
@@ -86,12 +86,12 @@
 - This is still much cheaper than running your own GPU instance or paying per-API-call to OpenAI
 
 ### LoRA Adapter Loading
-- The fine-tuned model repo (`vibesecurityguy/veris-classifier-v1`) contains only 162 MB of LoRA adapter weights, NOT a full 7B model
-- **Wrong**: `AutoModelForCausalLM.from_pretrained("vibesecurityguy/veris-classifier-v1")` — this tries to load adapter weights as a full model and crashes
+- The fine-tuned model repo (`vibesecurityguy/veris-classifier-v2`) contains only 162 MB of LoRA adapter weights, NOT a full 7B model
+- **Wrong**: `AutoModelForCausalLM.from_pretrained("vibesecurityguy/veris-classifier-v2")` — this tries to load adapter weights as a full model and crashes
 - **Right**: Load the base model first, then apply the adapter:
   ```python
-  model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
-  model = PeftModel.from_pretrained(model, "vibesecurityguy/veris-classifier-v1")
+  model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+  model = PeftModel.from_pretrained(model, "vibesecurityguy/veris-classifier-v2")
   model = model.merge_and_unload()  # Merge for faster inference
   ```
 
@@ -124,10 +124,10 @@
 - **Resume support pattern**: JSONL append with flush + dedup by incident_id. Saved the project when the overnight generation run failed.
 
 ## Completed (originally Future Improvements)
-- [x] Fine-tune a 7B model on the dataset for zero-cost inference (Qwen2.5-7B-Instruct with QLoRA → 162 MB adapter, 3,678 training steps)
+- [x] Fine-tune a 7B model on the dataset for zero-cost inference (Mistral-7B-Instruct-v0.3 with QLoRA → 162 MB adapter, 3,678 training steps)
 - [x] Validate generated classifications against the actual VERIS JSON schema (scripts/07_validate_dataset.py)
 - [x] Build an evaluation harness comparing fine-tuned model vs GPT-4o accuracy (scripts/06_evaluate.py with --compare flag)
-- [x] Model published to HuggingFace Hub: `vibesecurityguy/veris-classifier-v1`
+- [x] Model published to HuggingFace Hub: `vibesecurityguy/veris-classifier-v2`
 - [x] Deploy Gradio app to HF Spaces with ZeroGPU: [vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
 - [x] Model card with full training details pushed to HF Hub
 
@@ -137,4 +137,4 @@
 - [ ] Scrape original reference URLs from VCDB records for real incident descriptions
 - [ ] Add VERIS-to-MITRE ATT&CK mapping
 - [ ] Support VERIS schema version selection (1.3 vs 1.4)
-- [ ] Multi-language support (leverage Qwen2.5's multilingual capability)
+- [ ] Multi-language support

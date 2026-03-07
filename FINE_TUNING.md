@@ -6,7 +6,7 @@ Detailed write-up of how the VERIS Classifier model was fine-tuned, from data pr
 
 The goal was to fine-tune an open-source LLM to classify security incidents into the [VERIS framework](https://verisframework.org/) — eliminating the need for an OpenAI API key and enabling free inference on HuggingFace Spaces.
 
-**Result:** A fine-tuned Qwen2.5-7B-Instruct model that runs for free on ZeroGPU, handling both incident classification and VERIS Q&A.
+**Result:** A fine-tuned Mistral-7B-Instruct-v0.3 model that runs on ZeroGPU (HF Pro), handling both incident classification and VERIS Q&A.
 
 ## 1. Training Data Preparation
 
@@ -27,7 +27,7 @@ The generation pipeline used async Python with semaphore-controlled concurrency,
 
 ### Q&A Training Pairs (311 examples)
 
-Fine-tuning teaches a model behavior patterns (input/output mappings), not new knowledge. Since Qwen2.5-7B may not have deep VERIS domain knowledge, we generated 311 Q&A pairs across 10 categories:
+Fine-tuning teaches a model behavior patterns (input/output mappings), not new knowledge. Since the base model may not have deep VERIS domain knowledge, we generated 311 Q&A pairs across 10 categories:
 
 | Category | Count | Description |
 |----------|-------|-------------|
@@ -47,28 +47,30 @@ Fine-tuning teaches a model behavior patterns (input/output mappings), not new k
 Both datasets were combined into a unified chat-format JSONL:
 - **Training split:** 9,813 examples (95%)
 - **Evaluation split:** 517 examples (5%)
-- **Format:** ChatML-compatible messages (system/user/assistant)
+- **Format:** Chat-format messages (system/user/assistant)
 - **Shuffled** with seed=42 for reproducibility
 
 **Dataset on HF Hub:** [`vibesecurityguy/veris-classifier-training`](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
 
 ## 2. Model Selection
 
-### Why Qwen2.5-7B-Instruct?
+### Why Mistral-7B-Instruct-v0.3?
 
 | Model | Params | Pros | Cons |
 |-------|--------|------|------|
-| Qwen2.5-3B-Instruct | 3B | Fastest, cheapest | May lack capacity for 300+ enum values |
-| **Qwen2.5-7B-Instruct** | **7B** | **Best balance of quality vs cost** | **Moderate VRAM** |
-| Llama-3.1-8B-Instruct | 8B | Popular, well-tested | Slightly larger, no native ChatML |
-| Mistral-7B-Instruct | 7B | Good at structured output | Older architecture |
+| Qwen2.5-7B-Instruct | 7B | Strong structured output, ChatML | Chinese company (Alibaba) |
+| Llama-3.1-8B-Instruct | 8B | Most popular, huge community | Gated model (requires Meta license approval) |
+| **Mistral-7B-Instruct-v0.3** | **7B** | **Apache 2.0, great JSON output, no gating** | **Slightly older than Llama 3.1** |
+| Gemma 2-9B-IT | 9B | Strong benchmarks | Slightly larger, tighter license |
 
-Qwen2.5-7B was chosen because:
-- Native ChatML template support (matches our training format)
-- Strong structured JSON output capability
-- Good multilingual support (future VERIS translations)
-- Fits on A10G GPU with 4-bit quantization (QLoRA)
-- Active development and community support
+Mistral-7B-Instruct-v0.3 was chosen because:
+- **Fully open** (Apache 2.0 license) — no gating, no approval wait, no usage restrictions
+- **Strong structured JSON output** — critical for VERIS classification
+- **Same 7B size** — fits on A10G GPU with 4-bit quantization (QLoRA)
+- **Well-supported** in transformers/trl/peft ecosystem
+- **French company** (Mistral AI) — independent from Chinese and US big tech
+
+**Note:** v1 of the classifier used Qwen2.5-7B-Instruct. We switched to Mistral for licensing transparency — no data privacy concerns with open-weight models (all inference runs locally), but having a fully open license simplifies things.
 
 ## 3. Training Configuration
 
@@ -82,7 +84,7 @@ QLoRA enables fine-tuning a 7B model on a single GPU by:
 ### Hyperparameters
 
 ```
-Base Model:         Qwen/Qwen2.5-7B-Instruct
+Base Model:         mistralai/Mistral-7B-Instruct-v0.3
 Method:             QLoRA (4-bit NF4 quantization)
 LoRA Rank (r):      16
 LoRA Alpha:         32
@@ -95,7 +97,7 @@ Batch Size:         2
 Gradient Accum:     4 (effective batch size = 8)
 Max Sequence Len:   2048
 Optimizer:          AdamW (torch)
-Chat Template:      ChatML
+Chat Template:      Mistral (auto-detected by tokenizer)
 Hardware:           NVIDIA A10G (22GB VRAM)
 Training Time:      ~1-2 hours
 Cost:               ~$3-5 (HF AutoTrain)
@@ -159,7 +161,7 @@ Trainable:     40,370,176 / 4,393,342,464 (0.92%)
 Hardware:      NVIDIA A10G (22GB VRAM)
 Total steps:   3,678 (3 epochs × 9,813 examples ÷ batch 8)
 Output:        162 MB LoRA adapter (adapter_model.safetensors)
-Status:        ✅ Completed — model pushed to vibesecurityguy/veris-classifier-v1
+Status:        ✅ Completed — model pushed to vibesecurityguy/veris-classifier-v2
 ```
 
 ### Platform Comparison (What We Learned)
@@ -212,7 +214,7 @@ Three issues required fixing during deployment to Spaces:
 
 2. **Theme/CSS TypeError** — In Gradio 4.44, `theme` and `css` arguments go in the `gr.Blocks()` constructor, not `app.launch()`. Using `launch(theme=..., css=...)` raises `TypeError: unexpected keyword argument`. **Fix:** Move `theme=THEME, css=CUSTOM_CSS` from `launch()` to `gr.Blocks()`.
 
-3. **LoRA adapter loading** — The model repo only contains adapter weights (162 MB), not a full model. Loading it directly with `AutoModelForCausalLM.from_pretrained()` fails. **Fix:** Load the base model (`Qwen2.5-7B-Instruct`) first, apply the adapter with `PeftModel.from_pretrained()`, then merge with `merge_and_unload()`.
+3. **LoRA adapter loading** — The model repo only contains adapter weights (162 MB), not a full model. Loading it directly with `AutoModelForCausalLM.from_pretrained()` fails. **Fix:** Load the base model (`Mistral-7B-Instruct-v0.3`) first, apply the adapter with `PeftModel.from_pretrained()`, then merge with `merge_and_unload()`.
 
 ## 6. Evaluation
 
@@ -304,7 +306,7 @@ Random seeds are fixed (42) for dataset shuffling and evaluation sampling.
 ## Links
 
 - **Live Demo:** [huggingface.co/spaces/vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
-- **Model:** [huggingface.co/vibesecurityguy/veris-classifier-v1](https://huggingface.co/vibesecurityguy/veris-classifier-v1)
+- **Model:** [huggingface.co/vibesecurityguy/veris-classifier-v2](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
 - **Training Data:** [huggingface.co/datasets/vibesecurityguy/veris-classifier-training](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
 - **Source Code:** [github.com/pshamoon/veris-classifier](https://github.com/pshamoon/veris-classifier)
 - **VERIS Framework:** [verisframework.org](https://verisframework.org/)

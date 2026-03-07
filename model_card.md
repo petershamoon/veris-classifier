@@ -1,14 +1,14 @@
 ---
 library_name: peft
 license: apache-2.0
-base_model: Qwen/Qwen2.5-7B-Instruct
+base_model: mistralai/Mistral-7B-Instruct-v0.3
 tags:
   - veris
   - cybersecurity
   - incident-classification
   - lora
   - qlora
-  - qwen2
+  - mistral
 datasets:
   - vibesecurityguy/veris-classifier-training
   - vibesecurityguy/veris-incident-classifications
@@ -17,9 +17,9 @@ language:
 pipeline_tag: text-generation
 ---
 
-# VERIS Classifier v1
+# VERIS Classifier v2
 
-A fine-tuned [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) model that classifies cybersecurity incident descriptions into the [VERIS](http://veriscommunity.net/) (Vocabulary for Event Recording and Incident Sharing) framework.
+A fine-tuned [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) model that classifies cybersecurity incident descriptions into the [VERIS](http://veriscommunity.net/) (Vocabulary for Event Recording and Incident Sharing) framework.
 
 Given a plain-English incident description, the model outputs structured JSON with the correct VERIS categories for **action**, **actor**, **asset**, and **attribute**.
 
@@ -44,13 +44,12 @@ Given a plain-English incident description, the model outputs structured JSON wi
 
 | Parameter | Value |
 |-----------|-------|
-| **Base model** | Qwen/Qwen2.5-7B-Instruct |
+| **Base model** | mistralai/Mistral-7B-Instruct-v0.3 |
 | **Method** | QLoRA (4-bit NF4 quantization + LoRA) |
 | **LoRA rank (r)** | 16 |
 | **LoRA alpha** | 32 |
 | **LoRA dropout** | 0.05 |
 | **Target modules** | All linear (q, k, v, o, gate, up, down) |
-| **Trainable parameters** | 40.4M / 4.4B (0.92%) |
 | **Training examples** | 9,813 train / 517 eval |
 | **Epochs** | 3 |
 | **Batch size** | 2 x 4 gradient accumulation = 8 effective |
@@ -59,7 +58,6 @@ Given a plain-English incident description, the model outputs structured JSON wi
 | **Optimizer** | AdamW |
 | **Max sequence length** | 2,048 tokens |
 | **Hardware** | NVIDIA A10G (24GB VRAM) |
-| **Adapter size** | 162 MB |
 
 ## Training Data
 
@@ -78,8 +76,8 @@ The source classifications come from 8,559 real-world incidents in VCDB, spannin
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
-base_model = "Qwen/Qwen2.5-7B-Instruct"
-adapter = "vibesecurityguy/veris-classifier-v1"
+base_model = "mistralai/Mistral-7B-Instruct-v0.3"
+adapter = "vibesecurityguy/veris-classifier-v2"
 
 tokenizer = AutoTokenizer.from_pretrained(base_model)
 model = AutoModelForCausalLM.from_pretrained(base_model, device_map="auto")
@@ -114,7 +112,7 @@ This model is designed for:
 
 - **Live Demo:** [huggingface.co/spaces/vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
 - **Training Data:** [huggingface.co/datasets/vibesecurityguy/veris-classifier-training](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
-- **Source Code:** [github.com/pshamoon/veris-classifier](https://github.com/pshamoon/veris-classifier)
+- **Source Code:** [github.com/petershamoon/veris-classifier](https://github.com/petershamoon/veris-classifier)
 - **VERIS Framework:** [verisframework.org](https://verisframework.org/)
 
 ## Model Card Authors
