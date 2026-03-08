@@ -62,14 +62,14 @@
 - **Key lesson:** If AutoTrain isn't working, build your own training Space. A Docker container with `trl SFTTrainer` is ~100 lines and you control everything.
 
 ### HF Spaces Deployment Debugging
-- **Python 3.13 broke Gradio**: `audioop` removed from stdlib → `pydub` import fails → Gradio can't start. Fix: use Docker SDK with Python 3.10 instead of Gradio SDK.
+- **Python 3.13 broke Gradio**: `audioop` removed from stdlib → `pydub` import fails → Gradio can't start. Fix: add `pyaudioop` to requirements.txt (backport package). Alternative: use Docker SDK with Python 3.10.
 - **Gradio + huggingface_hub version conflict**: `HfFolder` removed in newer `huggingface_hub` but Gradio's OAuth module still imports it. Fix: don't use Gradio for training at all.
 - **trl missing `rich`**: `trl` uses `rich.console.Console` but doesn't declare it as a dependency. Fix: add `rich` to requirements.
 - **`libgomp: Invalid value for OMP_NUM_THREADS`**: Warning in CUDA containers, harmless but noisy. Caused by HF Spaces setting empty env vars.
 - **Spaces require port 7860 open**: Even a training-only container needs a health check endpoint. Python's `http.server` in a daemon thread is the lightest solution.
 - **Minimize dependencies for reliability**: Every additional package is a potential version conflict. A training job needs torch + transformers + trl + peft + bitsandbytes. That's it. No web frameworks.
-- **HfFolder shim for Gradio on Spaces**: The Spaces base image pre-installs `huggingface_hub >= 0.24` which removed `HfFolder`, but Gradio 4.x's `oauth.py` still imports it. Pinning `huggingface_hub` in requirements doesn't help because the base image version takes priority. Fix: add a compatibility shim at the **top** of `app.py` (before `import gradio`) that monkey-patches `huggingface_hub.HfFolder` with a minimal class wrapping `get_token()` and `login()`.
-- **Gradio 4.x theme/css placement**: In Gradio 4.44+, `theme` and `css` go in `gr.Blocks()` constructor, NOT in `app.launch()`. Using `launch(theme=..., css=...)` raises `TypeError: unexpected keyword argument`.
+- **HfFolder shim for Gradio on Spaces**: The Spaces base image pre-installs `huggingface_hub >= 0.24` which removed `HfFolder`, while Gradio OAuth internals still reference it. Pinning `huggingface_hub` in requirements doesn't help because the base image version takes priority. Fix: add a compatibility shim at the **top** of `app.py` (before `import gradio`) that monkey-patches `huggingface_hub.HfFolder` with a minimal class wrapping `get_token()` and `login()`.
+- **Theme/CSS placement**: Keep `theme` and `css` in the `gr.Blocks()` constructor. Passing them to `app.launch()` raises `TypeError`.
 
 ### SFTTrainer Dataset Pre-Processing (The `formatting_func` Trap)
 - **Problem**: `SFTTrainer` with `formatting_func` + a dataset containing nested `messages` column (list of dicts) crashes with: `"Unable to create tensor... excessive nesting (inputs type 'list' where type 'int' is expected)"`
@@ -112,12 +112,15 @@
 - JSONL format for dataset storage (one JSON object per line) - easy to append, stream, and resume
 - Classification target is a simplified/flattened version of full VERIS JSON - only includes the fields a model needs to predict
 - Gradio chosen over Streamlit for HF Spaces because it has better API support and the examples feature is built-in
-- Dual-mode inference (HF model + OpenAI fallback) - the fine-tuned model is primary, OpenAI is there if users want to compare or if the model fails
+- Dual-mode inference (HF model + OpenAI fallback) for local development, but production Space is HF-only by design
 - ZeroGPU for inference - requires HF Pro ($9/month) but no per-request GPU costs. Cold start is 30-60s but acceptable for a portfolio project
 - QLoRA over full fine-tuning - 10x cheaper, similar quality for our task, easier to deploy
+- JSON-first response + table toggle with filters/CSV export - keeps analyst and reporting workflows in one UI
+- Runtime output validation - catches enum/schema drift immediately after inference
+- Explicit session status + queue retry/backoff - reduces user confusion around OAuth quota routing and transient ZeroGPU queue failures
 
 ## Technical Notes
-- **Gradio 6 breaking changes**: Theme and CSS moved from `gr.Blocks()` constructor to `launch()` method. `elem_classes` removed from `gr.Examples`. Check the installed version before writing UI code.
+- **Gradio configuration**: Keep `theme` and `css` in `gr.Blocks()`; passing them to `launch()` raises `TypeError`. Always verify behavior against the installed Gradio version before UI refactors.
 - **Python 3.14 compatibility**: `setuptools.backends._legacy:_Backend` doesn't exist - use `setuptools.build_meta` as build backend.
 - **venv paths in launch configs**: Dev server configs need absolute paths to the venv Python binary, not just `python`.
 - **HF Hub authentication**: Token username must match the repo owner. Our token was for `vibesecurityguy` but scripts initially had `pshamoon` as the username - resulted in 403 Forbidden.
@@ -130,6 +133,9 @@
 - [x] Model published to HuggingFace Hub: `vibesecurityguy/veris-classifier-v2`
 - [x] Deploy Gradio app to HF Spaces with ZeroGPU: [vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
 - [x] Model card with full training details pushed to HF Hub
+- [x] Add output toggle (`JSON` / `Table`) with table filters and CSV export
+- [x] Add runtime validation summary in classify flow
+- [x] Add HF session status indicator and ZeroGPU queue retry/backoff
 
 ## Remaining Future Improvements
 - [ ] Add confidence scoring to classifications

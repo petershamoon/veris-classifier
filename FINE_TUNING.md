@@ -197,6 +197,11 @@ The app supports two backends:
 1. **Fine-tuned HF model (primary)** — runs on ZeroGPU, no API key needed
 2. **OpenAI GPT-4o (fallback)** — if user provides their own API key
 
+Current production policy (Space):
+- Hugging Face model only
+- No OpenAI key path in production requests
+- OpenAI fallback is kept for local development/debug use only
+
 ```python
 # ZeroGPU decorator for free GPU allocation
 @spaces.GPU(duration=120)
@@ -210,9 +215,9 @@ The `@spaces.GPU` decorator handles GPU allocation transparently — the model l
 
 Three issues required fixing during deployment to Spaces:
 
-1. **HfFolder ImportError** — Gradio 4.x's `oauth.py` imports `HfFolder` from `huggingface_hub`, but `HfFolder` was removed in `huggingface_hub >= 0.24`. The Spaces base image pre-installs the newer version, and pinning in `requirements.txt` doesn't override it. **Fix:** Add a monkey-patch shim at the top of `app.py` (before `import gradio`) that creates a minimal `HfFolder` class wrapping `get_token()` and `login()`.
+1. **HfFolder ImportError** — Gradio OAuth internals import `HfFolder` from `huggingface_hub`, but `HfFolder` was removed in `huggingface_hub >= 0.24`. The Spaces base image pre-installs the newer version, and pinning in `requirements.txt` doesn't override it. **Fix:** Add a monkey-patch shim at the top of `app.py` (before `import gradio`) that creates a minimal `HfFolder` class wrapping `get_token()` and `login()`.
 
-2. **Theme/CSS TypeError** — In Gradio 4.44, `theme` and `css` arguments go in the `gr.Blocks()` constructor, not `app.launch()`. Using `launch(theme=..., css=...)` raises `TypeError: unexpected keyword argument`. **Fix:** Move `theme=THEME, css=CUSTOM_CSS` from `launch()` to `gr.Blocks()`.
+2. **Theme/CSS TypeError** — Theme/CSS belong in the `gr.Blocks()` constructor, not `app.launch()`. Using `launch(theme=..., css=...)` raises `TypeError: unexpected keyword argument`. **Fix:** Move `theme=THEME, css=CUSTOM_CSS` from `launch()` to `gr.Blocks()`.
 
 3. **LoRA adapter loading** — The model repo only contains adapter weights (162 MB), not a full model. Loading it directly with `AutoModelForCausalLM.from_pretrained()` fails. **Fix:** Load the base model (`Mistral-7B-Instruct-v0.3`) first, apply the adapter with `PeftModel.from_pretrained()`, then merge with `merge_and_unload()`.
 

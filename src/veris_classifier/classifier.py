@@ -7,8 +7,6 @@ Supports two backends:
 
 import json
 import logging
-import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +52,15 @@ def load_hf_model():
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
+    # This model path expects GPU execution (ZeroGPU on Spaces). On CPU-only
+    # runtimes, transformers can fail with opaque disk offload errors.
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "Fine-tuned model requires GPU. This Space appears to be on CPU-only "
+            "(no CUDA device available). Request ZeroGPU (A10G) or provide an "
+            "OpenAI API key to use fallback inference."
+        )
+
     logger.info(f"Loading base model: {BASE_MODEL_ID}")
     _hf_tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
     if _hf_tokenizer.pad_token is None:
@@ -84,15 +91,28 @@ def load_hf_model():
 
 def _generate_hf(messages: list[dict], max_new_tokens: int = 1024) -> str:
     """Generate a response using the fine-tuned HF model."""
+    return _generate_hf_with_options(messages, max_new_tokens=max_new_tokens)
+
+
+def _generate_hf_with_options(
+    messages: list[dict],
+    max_new_tokens: int = 1024,
+    do_sample: bool = True,
+    temperature: float = 0.2,
+    top_p: float = 0.9,
+) -> str:
+    """Generate a response using the fine-tuned HF model with explicit sampling controls."""
     pipe, tokenizer = load_hf_model()
 
-    outputs = pipe(
-        messages,
-        max_new_tokens=max_new_tokens,
-        do_sample=True,
-        temperature=0.2,
-        top_p=0.9,
-    )
+    generate_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "do_sample": do_sample,
+    }
+    if do_sample:
+        generate_kwargs["temperature"] = temperature
+        generate_kwargs["top_p"] = top_p
+
+    outputs = pipe(messages, **generate_kwargs)
 
     return outputs[0]["generated_text"].strip()
 
@@ -122,6 +142,32 @@ def _generate_openai(
     return response.choices[0].message.content.strip()
 
 
+def _parse_json_response(raw: str) -> dict:
+    """Parse model output into JSON with light recovery for wrapped text."""
+    text = raw.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+        text = text.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+    # Recover when the model prepends/appends prose around a JSON object.
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(text[start : end + 1])
+
+    raise json.JSONDecodeError("No JSON object found in model output", text, 0)
+
+
 # ── Public API ────────────────────────────────────────────────────────────
 
 
@@ -148,7 +194,7 @@ def classify_incident(
     ]
 
     if use_hf:
-        raw = _generate_hf(messages, max_new_tokens=1024)
+        raw = _generate_hf_with_options(messages, max_new_tokens=1024, do_sample=False)
     else:
         if client is None:
             raise ValueError("OpenAI client required when use_hf=False")
@@ -156,15 +202,7 @@ def classify_incident(
             client, messages, model=model, temperature=0.2, json_mode=True
         )
 
-    # Parse JSON from response (handle markdown fences if present)
-    text = raw.strip()
-    if text.startswith("```"):
-        # Strip ```json ... ``` wrapper
-        lines = text.split("\n")
-        text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
-        text = text.strip()
-
-    return json.loads(text)
+    return _parse_json_response(raw)
 
 
 def answer_question(

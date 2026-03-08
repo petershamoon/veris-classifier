@@ -9,22 +9,40 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from veris_classifier.enums import (
-    ACTION_ERROR_VARIETY,
-    ACTION_HACKING_VARIETY,
-    ACTION_MALWARE_VARIETY,
-    ACTION_MISUSE_VARIETY,
-    ACTION_PHYSICAL_VARIETY,
-    ACTION_SOCIAL_VARIETY,
-    ACTOR_EXTERNAL_VARIETY,
-    ACTOR_INTERNAL_VARIETY,
-    ACTOR_MOTIVE,
-    ASSET_VARIETY,
-    ATTRIBUTE_AVAILABILITY_VARIETY,
-    ATTRIBUTE_CONFIDENTIALITY_DATA_VARIETY,
-    ATTRIBUTE_INTEGRITY_VARIETY,
-    DATA_DISCLOSURE,
-)
+try:
+    from veris_classifier.enums import (
+        ACTION_ERROR_VARIETY,
+        ACTION_HACKING_VARIETY,
+        ACTION_MALWARE_VARIETY,
+        ACTION_MISUSE_VARIETY,
+        ACTION_PHYSICAL_VARIETY,
+        ACTION_SOCIAL_VARIETY,
+        ACTOR_EXTERNAL_VARIETY,
+        ACTOR_INTERNAL_VARIETY,
+        ACTOR_MOTIVE,
+        ASSET_VARIETY,
+        ATTRIBUTE_AVAILABILITY_VARIETY,
+        ATTRIBUTE_CONFIDENTIALITY_DATA_VARIETY,
+        ATTRIBUTE_INTEGRITY_VARIETY,
+        DATA_DISCLOSURE,
+    )
+except ModuleNotFoundError:
+    from src.veris_classifier.enums import (
+        ACTION_ERROR_VARIETY,
+        ACTION_HACKING_VARIETY,
+        ACTION_MALWARE_VARIETY,
+        ACTION_MISUSE_VARIETY,
+        ACTION_PHYSICAL_VARIETY,
+        ACTION_SOCIAL_VARIETY,
+        ACTOR_EXTERNAL_VARIETY,
+        ACTOR_INTERNAL_VARIETY,
+        ACTOR_MOTIVE,
+        ASSET_VARIETY,
+        ATTRIBUTE_AVAILABILITY_VARIETY,
+        ATTRIBUTE_CONFIDENTIALITY_DATA_VARIETY,
+        ATTRIBUTE_INTEGRITY_VARIETY,
+        DATA_DISCLOSURE,
+    )
 
 # ---------------------------------------------------------------------------
 # Lookup tables

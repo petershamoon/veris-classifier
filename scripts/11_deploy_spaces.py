@@ -9,7 +9,6 @@ Usage:
 """
 
 import argparse
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -71,6 +70,13 @@ def main():
         exist_ok=True,
         private=False,
     )
+    # `create_repo(..., exist_ok=True)` does not reliably update hardware on
+    # existing Spaces, so request it explicitly each deploy.
+    try:
+        api.request_space_hardware(repo_id=args.space_id, hardware="zero-a10g")
+        print("Requested Space hardware: zero-a10g")
+    except Exception as e:
+        print(f"WARNING: Could not request zero-a10g hardware: {e}")
 
     print("Uploading files...")
     for repo_path, local_path in FILES_TO_UPLOAD.items():

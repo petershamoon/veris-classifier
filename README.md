@@ -1,233 +1,142 @@
 # VERIS Incident Classifier
 
-AI-powered security incident classification using the [VERIS](https://verisframework.org/) (Vocabulary for Event Recording and Incident Sharing) framework.
+Convert plain-English security incident descriptions into structured VERIS output.
 
-Converts natural language incident reports into structured VERIS taxonomy — the same framework behind the [Verizon Data Breach Investigations Report (DBIR)](https://www.verizon.com/business/resources/reports/dbir/).
+Live app:
+- https://huggingface.co/spaces/vibesecurityguy/veris-classifier
 
-**[Try the live demo on Hugging Face Spaces](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)** — no API key required!
+If you just want to try it, open the live app and paste an incident description.
 
-## What It Does
+## What This App Does
 
-**Classify incidents** — Describe a security incident in plain English, get a structured VERIS JSON classification covering actors, actions, assets, and attributes.
+- Classifies an incident into VERIS dimensions (`actor`, `action`, `asset`, `attribute`)
+- Supports both `JSON` view (raw model output) and `Table` view (flattened rows)
+- Validates model output against known VERIS enum sets
+- Shows validation results (`Passed`, warnings, errors)
+- Supports table filtering by dimension and `Errors Only`
+- Exports filtered table rows to CSV
+- Answers VERIS framework questions in a separate tab
 
-**Ask about VERIS** — Query the framework's taxonomy, enumerations, and classification best practices.
+## How Production Works (Hugging Face Space)
 
-### Example
+- Runs on Hugging Face ZeroGPU (`zero-a10g`)
+- Uses the fine-tuned model only in production
+- Requires user sign-in with Hugging Face so requests are tied to user quota
+- Shows a session status card so users can see whether their login session is attached
+- Retries queue timeouts once before returning an error
 
-**Input:**
-> "Russian organized crime group exploited a vulnerability in our MOVEit file transfer server, deployed ransomware, and exfiltrated 50,000 customer records."
+Important:
+- Production does not use OpenAI keys.
+- Local development still supports optional OpenAI fallback.
 
-**Output:**
-```json
-{
-  "actor": {
-    "external": {
-      "variety": ["Organized crime"],
-      "motive": ["Financial"]
-    }
-  },
-  "action": {
-    "hacking": {
-      "variety": ["Exploit vuln"],
-      "vector": ["Web application"]
-    },
-    "malware": {
-      "variety": ["Ransomware"],
-      "vector": ["Direct install"]
-    }
-  },
-  "asset": {
-    "variety": ["S - File", "S - Web application"]
-  },
-  "attribute": {
-    "confidentiality": {
-      "data_disclosure": "Yes",
-      "data_variety": ["Personal"]
-    },
-    "availability": {
-      "variety": ["Interruption"]
-    }
-  }
-}
-```
+## Why We Made These Decisions
 
-## Architecture
+**ZeroGPU + HF OAuth**
+- We wanted no paid per-request API dependency in production.
+- ZeroGPU gives burst A10G access, but quota is user-scoped.
+- OAuth login is required so requests count against the user, not an anonymous pool.
 
-```
-                                    VERIS Incident Classifier
-                                    ========================
+**Fine-tuned open model (Mistral-7B + LoRA adapter)**
+- Keeps inference under our control in HF Spaces.
+- Avoids vendor lock-in for runtime inference.
+- LoRA adapter keeps model artifact smaller and easier to deploy.
 
-    ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
-    │   VCDB (GitHub)  │────>│  Dataset Generation  │────>│  HuggingFace Hub    │
-    │  10,037 incidents│     │  GPT-4o-mini synth   │     │  10K+ train pairs   │
-    └─────────────────┘     │  + 311 Q&A pairs     │     │  + 517 eval pairs   │
-                            └──────────────────────┘     └─────────┬───────────┘
-                                                                   │
-                                                                   v
-    ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
-    │   Gradio App     │<────│  Fine-tuned Model    │<────│  Custom Docker Space│
-    │  ZeroGPU (A10G)  │     │  Mistral-7B-Instruct│     │  trl SFTTrainer     │
-    │  No API key!     │     │  vibesecurityguy/    │     │  QLoRA, 3 epochs    │
-    └─────────────────┘     │  veris-classifier-v2 │     │  A10G GPU           │
-                            └──────────────────────┘     └─────────────────────┘
-```
+**JSON-first output with table toggle**
+- JSON is best for analysts and integrations.
+- Table view is better for quick review and reporting.
+- CSV export makes downstream handoff easier.
 
-## Model & Dataset
+**Built-in validation**
+- LLM outputs can drift in structure or enum values.
+- Runtime validation catches bad/missing values immediately.
+- Users can review warnings/errors without leaving the app.
 
-### Fine-tuned Model
+**Retry/backoff on ZeroGPU queue errors**
+- Queue contention is common with shared GPUs.
+- A short automatic retry improves reliability without hiding real failures.
 
-| Property | Value |
-|----------|-------|
-| Base Model | [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) |
-| Method | QLoRA (4-bit quantized LoRA, r=16, alpha=32) |
-| Training Data | 10,019 classification + 311 Q&A pairs |
-| Epochs | 3 |
-| Effective Batch Size | 8 (2 x 4 gradient accumulation) |
-| Learning Rate | 2e-4 with cosine scheduler |
-| Inference | HF ZeroGPU (A10G burst, requires HF Pro $9/mo) |
+## Current Architecture
 
-**Model on HF Hub:** [`vibesecurityguy/veris-classifier-v2`](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
+- UI: Gradio (`app.py`)
+- Runtime inference backend: Hugging Face model pipeline (`src/veris_classifier/classifier.py`)
+- Output validation: `src/veris_classifier/validator.py`
+- Deployment: `scripts/11_deploy_spaces.py`
 
-### Training Dataset
+## Quick Start (Local)
 
-Built from **10,000+ real incidents** in the [VERIS Community Database (VCDB)](https://github.com/vz-risk/VCDB):
-
-1. Ingested all 10,037 validated VCDB incident records from GitHub
-2. Generated synthetic natural language descriptions for each using GPT-4o-mini
-3. Paired descriptions with real VERIS classifications as training data
-4. Added 311 VERIS Q&A pairs across 10 knowledge categories
-5. Combined into unified chat-format dataset (95/5 train/eval split)
-
-**Datasets on HF Hub:**
-- [`vibesecurityguy/veris-incident-classifications`](https://huggingface.co/datasets/vibesecurityguy/veris-incident-classifications) — raw classification pairs
-- [`vibesecurityguy/veris-classifier-training`](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training) — AutoTrain-ready format
-
-## Project Structure
-
-```
-.
-├── app.py                              # Gradio web application (ZeroGPU + OpenAI fallback)
-├── src/veris_classifier/
-│   ├── classifier.py                   # Dual-mode inference (HF model + OpenAI)
-│   ├── enums.py                        # Complete VERIS enumerations (300+ values)
-│   └── validator.py                    # Schema validation for classifications
-├── scripts/
-│   ├── 01_ingest_vcdb.py               # Pull & parse VCDB incidents from GitHub
-│   ├── 02_generate_dataset_fast.py     # Async dataset generation (GPT-4o-mini)
-│   ├── 03_push_to_hf.py               # Push dataset to Hugging Face Hub
-│   ├── 04_finetune.py                  # Prepare fine-tuning data (chat + completion formats)
-│   ├── 05_deploy_spaces.sh            # Bash deployment script
-│   ├── 06_evaluate.py                  # Evaluation harness (HF vs OpenAI comparison)
-│   ├── 07_validate_dataset.py          # Quality validation (dupes, jargon, enums)
-│   ├── 08_prepare_autotrain.py         # Format data for HF AutoTrain
-│   ├── 09_generate_qa.py              # Generate VERIS Q&A training pairs
-│   ├── 10_launch_finetune.py          # AutoTrain configuration & launch
-│   ├── 11_deploy_spaces.py            # Python deployment to HF Spaces
-│   ├── 12_train_via_api.py            # HF API training launcher (attempted)
-│   └── 13_launch_training_space.py    # Docker training Space (final approach)
-├── spaces/
-│   └── README.md                       # HF Spaces metadata
-├── data/                               # Generated data (gitignored)
-│   ├── dataset/                        # Raw training data
-│   ├── autotrain/                      # AutoTrain-formatted data
-│   └── evaluation/                     # Evaluation results
-├── FINE_TUNING.md                      # Detailed fine-tuning methodology
-├── LESSONS_LEARNED.md                  # Technical notes & gotchas
-├── pyproject.toml
-└── requirements.txt
-```
-
-## Setup
-
-### Use the Live Demo (Easiest)
-Visit **[huggingface.co/spaces/vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)** — no setup needed.
-
-### Run Locally
+### 1. Clone and install
 
 ```bash
-# Clone
 git clone https://github.com/pshamoon/veris-classifier.git
 cd veris-classifier
-
-# Install
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
-
-# Configure
-cp .env.example .env
-# Edit .env with your API keys (optional — only needed for OpenAI fallback)
-
-# Run
-python app.py
-# Opens at http://localhost:7860
+pip install -r requirements.txt
 ```
 
-### Python API
-
-```python
-from src.veris_classifier.classifier import classify_incident, answer_question
-
-# Using the fine-tuned model (requires GPU)
-result = classify_incident(description="Employee laptop stolen from their car", use_hf=True)
-print(result)
-
-# Using OpenAI (requires API key)
-from openai import OpenAI
-client = OpenAI()
-result = classify_incident(client=client, description="Employee laptop stolen from their car")
-print(result)
-
-# Ask about VERIS
-answer = answer_question(question="What's the difference between hacking and misuse?", use_hf=True)
-print(answer)
-```
-
-### Rebuild the Dataset
+### 2. Environment
 
 ```bash
-# 1. Pull VCDB incidents
-python scripts/01_ingest_vcdb.py
-
-# 2. Generate descriptions (requires OpenAI API key)
-python scripts/02_generate_dataset_fast.py
-
-# 3. Generate Q&A pairs
-python scripts/09_generate_qa.py
-
-# 4. Prepare for AutoTrain & push
-python scripts/08_prepare_autotrain.py --push
-
-# 5. Evaluate
-python scripts/06_evaluate.py --compare --sample-size 50
+cp .env.example .env
 ```
 
-## VERIS Overview
+### 3. Run
 
-VERIS classifies incidents across four dimensions (the "4 A's"):
+```bash
+python app.py
+```
 
-| Dimension | Categories | Description |
-|-----------|-----------|-------------|
-| **Actors** | External, Internal, Partner | Who caused it |
-| **Actions** | Malware, Hacking, Social, Misuse, Physical, Error, Environmental | What they did |
-| **Assets** | Server, Network, User Device, Terminal, Media, People | What was affected |
-| **Attributes** | Confidentiality, Integrity, Availability | How it was affected |
+### 4. Backend selection
 
-These create **315 possible combinations** (3 x 7 x 5 x 3) in the A4 Grid.
+- To run local HF model inference, set `VERIS_USE_HF=true` and use a local GPU.
+- If no local GPU is available, local mode can use OpenAI fallback only if you explicitly configure an OpenAI key.
 
-## Tech Stack
+## Deploy to Hugging Face Space
 
-- **Mistral-7B-Instruct** — fine-tuned classification model (QLoRA)
-- **HuggingFace** — model hosting, dataset hosting, Spaces deployment, ZeroGPU
-- **Gradio** — web interface with dark theme
-- **OpenAI GPT-4o-mini** — synthetic dataset generation
-- **VCDB** — 10,000+ real incident records
-- **Python 3.10+** — async data pipeline, evaluation harness
+```bash
+python scripts/11_deploy_spaces.py
+```
+
+This uploads:
+- `app.py`
+- `requirements.txt`
+- `spaces/README.md` as Space `README.md`
+- `src/veris_classifier/*`
+
+## Repository Layout
+
+```text
+app.py
+src/veris_classifier/
+  classifier.py
+  enums.py
+  validator.py
+scripts/
+  01_ingest_vcdb.py
+  02_generate_dataset_fast.py
+  06_evaluate.py
+  07_validate_dataset.py
+  08_prepare_autotrain.py
+  09_generate_qa.py
+  11_deploy_spaces.py
+  13_launch_training_space.py
+FINE_TUNING.md
+LESSONS_LEARNED.md
+spaces/README.md
+```
+
+## Data and Model Links
+
+- Model: https://huggingface.co/vibesecurityguy/veris-classifier-v2
+- Training dataset: https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training
+- Incident classification dataset: https://huggingface.co/datasets/vibesecurityguy/veris-incident-classifications
+- VERIS framework: https://verisframework.org/
+- VCDB source: https://github.com/vz-risk/VCDB
 
 ## Documentation
 
-- **[FINE_TUNING.md](FINE_TUNING.md)** — Detailed fine-tuning methodology, model selection rationale, platform debugging journey, and hyperparameter choices with reasoning
-- **[LESSONS_LEARNED.md](LESSONS_LEARNED.md)** — Technical lessons learned: OpenAI rate limits, HF Spaces deployment gotchas, dependency conflicts, architecture decisions and why they were made
+- Fine-tuning and training path: [`FINE_TUNING.md`](FINE_TUNING.md)
+- Engineering lessons and deployment notes: [`LESSONS_LEARNED.md`](LESSONS_LEARNED.md)
 
 ## License
 

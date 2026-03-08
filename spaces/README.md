@@ -4,9 +4,11 @@ emoji: "\U0001F512"
 colorFrom: blue
 colorTo: indigo
 sdk: gradio
-sdk_version: "4.44.0"
+sdk_version: "6.8.0"
+python_version: "3.10"
 app_file: app.py
 pinned: false
+hf_oauth: true
 license: mit
 short_description: AI-powered VERIS incident classification
 models:
@@ -18,21 +20,27 @@ datasets:
 
 # VERIS Incident Classifier
 
-Classify security incidents into the [VERIS framework](https://verisframework.org/) using a fine-tuned Mistral-7B-Instruct model. **No API key required.**
+Classify incident descriptions into VERIS using a fine-tuned Mistral-7B model.
 
-## Features
+## Key Features
 
-- **Classify Incident** — Describe a security incident in plain English, get a structured VERIS JSON classification
-- **Ask About VERIS** — Ask questions about the VERIS taxonomy, enumerations, and best practices
-- **Free Inference** — Runs on HF ZeroGPU (A10G)
+- Incident classification to structured VERIS output
+- Output toggle: `JSON` or `Table`
+- Validation summary for enum/schema quality
+- Table filters and CSV export
+- VERIS Q&A mode
+- Hugging Face login + session status for ZeroGPU quota routing
 
-## Model
+## Runtime
 
-Fine-tuned [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) using QLoRA (4-bit quantization) on 10,000+ real security incidents from the [VERIS Community Database](https://github.com/vz-risk/VCDB) plus 300+ VERIS Q&A pairs.
+- Hardware: ZeroGPU (`zero-a10g`)
+- Auth: HF OAuth enabled (`hf_oauth: true`)
+- Inference policy in Space: Hugging Face model only (no OpenAI key usage)
 
 ## Links
 
-- [Model](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
-- [Training Dataset](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
-- [VERIS Framework](https://verisframework.org/)
-- [Source Code](https://github.com/petershamoon/veris-classifier)
+- Live Space: https://huggingface.co/spaces/vibesecurityguy/veris-classifier
+- Model: https://huggingface.co/vibesecurityguy/veris-classifier-v2
+- Training dataset: https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training
+- Source code: https://github.com/pshamoon/veris-classifier
+- VERIS framework: https://verisframework.org/

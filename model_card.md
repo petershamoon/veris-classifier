@@ -19,7 +19,7 @@ pipeline_tag: text-generation
 
 # VERIS Classifier v2
 
-A fine-tuned [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) model that classifies cybersecurity incident descriptions into the [VERIS](http://veriscommunity.net/) (Vocabulary for Event Recording and Incident Sharing) framework.
+A fine-tuned [Mistral-7B-Instruct-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) model that classifies cybersecurity incident descriptions into the [VERIS](https://verisframework.org/) (Vocabulary for Event Recording and Incident Sharing) framework.
 
 Given a plain-English incident description, the model outputs structured JSON with the correct VERIS categories for **action**, **actor**, **asset**, and **attribute**.
 
@@ -33,9 +33,12 @@ Given a plain-English incident description, the model outputs structured JSON wi
 **Output:**
 ```json
 {
-  "action": {"hacking": {"variety": ["Ransomware"]}, "social": {"variety": ["Phishing"]}},
+  "action": {
+    "malware": {"variety": ["Ransomware"], "vector": ["Email"]},
+    "social": {"variety": ["Phishing"], "vector": ["Email"]}
+  },
   "actor": {"external": {"variety": ["Unaffiliated"], "motive": ["Financial"]}},
-  "asset": {"assets": [{"variety": "S - Database"}]},
+  "asset": {"variety": ["S - Database"]},
   "attribute": {"availability": {"variety": ["Obscuration"]}}
 }
 ```
@@ -112,7 +115,7 @@ This model is designed for:
 
 - **Live Demo:** [huggingface.co/spaces/vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
 - **Training Data:** [huggingface.co/datasets/vibesecurityguy/veris-classifier-training](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
-- **Source Code:** [github.com/petershamoon/veris-classifier](https://github.com/petershamoon/veris-classifier)
+- **Source Code:** [github.com/pshamoon/veris-classifier](https://github.com/pshamoon/veris-classifier)
 - **VERIS Framework:** [verisframework.org](https://verisframework.org/)
 
 ## Model Card Authors

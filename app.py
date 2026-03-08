@@ -31,16 +31,20 @@ except ImportError:
 import json
 import logging
 import os
+import csv
+import tempfile
+import time
+from importlib import metadata, util
+from typing import Any
 
 import gradio as gr
 from dotenv import load_dotenv
 
 from src.veris_classifier.classifier import (
-    HF_MODEL_ID,
     answer_question,
     classify_incident,
-    load_hf_model,
 )
+from src.veris_classifier.validator import validate_classification
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -51,8 +55,35 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 IS_SPACES = os.getenv("SPACE_ID") is not None
 
+spaces = None
 if IS_SPACES:
-    import spaces
+    try:
+        import spaces as _spaces
+
+        # Local `spaces/` directory can shadow the HF `spaces` package.
+        if hasattr(_spaces, "GPU"):
+            spaces = _spaces
+        else:
+            raise ImportError("Imported `spaces` module has no GPU decorator")
+    except Exception:
+        try:
+            # Load the installed HF spaces package directly from site-packages.
+            dist = metadata.distribution("spaces")
+            module_path = dist.locate_file("spaces/__init__.py")
+            spec = util.spec_from_file_location("hf_spaces_runtime", module_path)
+            if spec is None or spec.loader is None:
+                raise ImportError("Could not load spaces package spec")
+            _spaces = util.module_from_spec(spec)
+            spec.loader.exec_module(_spaces)
+            if hasattr(_spaces, "GPU"):
+                spaces = _spaces
+            else:
+                raise ImportError("Installed spaces package has no GPU decorator")
+        except Exception as e:
+            logger.warning(
+                "HF Spaces GPU decorator unavailable (%s). Falling back to non-GPU wrappers.",
+                e,
+            )
 
 # ---------------------------------------------------------------------------
 # Custom CSS
@@ -248,6 +279,48 @@ textarea:focus {
     color: #60a5fa;
     text-decoration: none;
 }
+
+.status-card {
+    border: 1px solid #334155;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 10px;
+    padding: 8px 12px;
+}
+
+#table-controls .wrap {
+    align-items: end;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+    .hero-section {
+        padding: 28px 20px;
+    }
+    .hero-title {
+        font-size: 1.75rem !important;
+    }
+    .stats-row {
+        flex-wrap: wrap;
+    }
+    .stat-card {
+        min-width: calc(50% - 8px);
+    }
+}
+
+@media (max-width: 560px) {
+    .stat-card {
+        min-width: 100%;
+    }
+    .hero-badges {
+        gap: 8px;
+    }
+    .primary-btn {
+        width: 100% !important;
+    }
+    #table-controls .wrap {
+        gap: 8px !important;
+    }
+}
 """
 
 # ---------------------------------------------------------------------------
@@ -275,6 +348,87 @@ EXAMPLES_QA = [
 # ---------------------------------------------------------------------------
 # Inference functions
 # ---------------------------------------------------------------------------
+ZEROGPU_QUEUE_HINT = "No GPU was available after"
+SPACES_PAGE_URL = "https://huggingface.co/spaces/vibesecurityguy/veris-classifier"
+SPACE_HOST_URL = "https://vibesecurityguy-veris-classifier.hf.space"
+ZEROGPU_RETRY_ATTEMPTS = 2
+ZEROGPU_RETRY_DELAY_SECONDS = 3
+
+
+def _is_zerogpu_queue_timeout(err: Exception) -> bool:
+    """Detect ZeroGPU queue timeout errors from the spaces runtime."""
+    return ZEROGPU_QUEUE_HINT in str(err)
+
+
+def _spaces_user_logged_in(
+    request: gr.Request | None,
+    profile: gr.OAuthProfile | None = None,
+) -> bool:
+    """True when a Spaces OAuth user is attached to this request."""
+    if profile is not None:
+        return True
+    if request is None:
+        return False
+    if getattr(request, "username", None):
+        return True
+    # Gradio/HF OAuth stores profile info in session; use it as fallback signal.
+    session = getattr(request, "session", None)
+    if isinstance(session, dict) and session.get("oauth_info"):
+        return True
+    return False
+
+
+def _session_status_markdown(
+    request: gr.Request | None = None,
+    profile: gr.OAuthProfile | None = None,
+) -> str:
+    """Render current Spaces auth status for the user."""
+    if not IS_SPACES:
+        return ""
+
+    if _spaces_user_logged_in(request, profile):
+        username = None
+        if profile is not None:
+            username = (
+                getattr(profile, "preferred_username", None)
+                or getattr(profile, "name", None)
+            )
+        if not username and request is not None:
+            username = getattr(request, "username", None)
+        if username:
+            return (
+                f"**Session status:** Logged in as `{username}`. "
+                "ZeroGPU requests will use your account quota."
+            )
+        return "**Session status:** Logged in. ZeroGPU requests will use your account quota."
+
+    return (
+        "**Session status:** Not logged in. Click sign in to attach this browser session "
+        "to your Hugging Face quota."
+    )
+
+
+def _run_with_zerogpu_retry(call):
+    """Retry queue-timeout failures once before returning an error."""
+    last_error = None
+    for attempt in range(1, ZEROGPU_RETRY_ATTEMPTS + 1):
+        try:
+            return call()
+        except Exception as e:
+            last_error = e
+            if _is_zerogpu_queue_timeout(e) and attempt < ZEROGPU_RETRY_ATTEMPTS:
+                logger.warning(
+                    "ZeroGPU queue timeout (attempt %d/%d). Retrying in %ss.",
+                    attempt,
+                    ZEROGPU_RETRY_ATTEMPTS,
+                    ZEROGPU_RETRY_DELAY_SECONDS,
+                )
+                time.sleep(ZEROGPU_RETRY_DELAY_SECONDS)
+                continue
+            raise
+    raise last_error
+
+
 
 def _use_hf_model() -> bool:
     """Check if we should use the fine-tuned HF model."""
@@ -285,24 +439,46 @@ def _use_hf_model() -> bool:
     return os.getenv("VERIS_USE_HF", "").lower() in ("1", "true", "yes")
 
 
-def classify(description: str, api_key: str) -> str:
+def classify(
+    description: str,
+    api_key: str,
+    request: gr.Request | None = None,
+    profile: gr.OAuthProfile | None = None,
+) -> str:
     """Classify an incident — uses HF model on Spaces, OpenAI otherwise."""
     if not description.strip():
-        return "Please enter an incident description."
+        return json.dumps({"error": "Please enter an incident description."}, indent=2)
+    if IS_SPACES and not _spaces_user_logged_in(request, profile):
+        return json.dumps(
+            {
+                "error": (
+                    "Please log in on Hugging Face and open this app from "
+                    f"{SPACES_PAGE_URL}. ZeroGPU quota is per logged-in user."
+                )
+            },
+            indent=2,
+        )
 
     use_hf = _use_hf_model()
 
-    # If user provided an API key, prefer OpenAI (explicit choice)
-    if api_key.strip():
+    # Local-only override: allow OpenAI fallback when running outside Spaces.
+    if api_key.strip() and not IS_SPACES:
         use_hf = False
 
     if use_hf:
         try:
-            result = _classify_gpu(description)
+            result = _run_with_zerogpu_retry(lambda: _classify_gpu(description))
             return json.dumps(result, indent=2)
         except Exception as e:
             logger.error(f"HF model error: {e}")
-            # Fall through to OpenAI if available
+            if _is_zerogpu_queue_timeout(e):
+                return json.dumps(
+                    {"error": "ZeroGPU queue is full right now. Try again in 1-2 minutes."},
+                    indent=2,
+                )
+            if IS_SPACES:
+                return json.dumps({"error": f"Model inference failed: {str(e)}"}, indent=2)
+            # Local fallback path only.
             key = os.getenv("OPENAI_API_KEY", "")
             if not key:
                 return json.dumps({"error": f"Model inference failed: {str(e)}"}, indent=2)
@@ -321,21 +497,36 @@ def classify(description: str, api_key: str) -> str:
         return json.dumps({"error": str(e)}, indent=2)
 
 
-def ask(question: str, api_key: str) -> str:
+def ask(
+    question: str,
+    api_key: str,
+    request: gr.Request | None = None,
+    profile: gr.OAuthProfile | None = None,
+) -> str:
     """Answer a VERIS question — uses HF model on Spaces, OpenAI otherwise."""
     if not question.strip():
         return "*Please enter a question.*"
+    if IS_SPACES and not _spaces_user_logged_in(request, profile):
+        return (
+            "**Error:** Please log in on Hugging Face and open this app from "
+            f"{SPACES_PAGE_URL}. ZeroGPU quota is per logged-in user."
+        )
 
     use_hf = _use_hf_model()
 
-    if api_key.strip():
+    if api_key.strip() and not IS_SPACES:
         use_hf = False
 
     if use_hf:
         try:
-            return _ask_gpu(question)
+            return _run_with_zerogpu_retry(lambda: _ask_gpu(question))
         except Exception as e:
             logger.error(f"HF model error: {e}")
+            if _is_zerogpu_queue_timeout(e):
+                return "**Error:** ZeroGPU queue is full right now. Try again in 1-2 minutes."
+            if IS_SPACES:
+                return f"**Error:** Model inference failed: {str(e)}"
+            # Local fallback path only.
             key = os.getenv("OPENAI_API_KEY", "")
             if not key:
                 return f"**Error:** Model inference failed: {str(e)}"
@@ -353,17 +544,219 @@ def ask(question: str, api_key: str) -> str:
         return f"**Error:** {str(e)}"
 
 
+def _dimension_from_path(path: str) -> str:
+    root = path.split(".", 1)[0].split("[", 1)[0]
+    return root.title() if root else "General"
+
+
+def _flatten_for_table(value: Any, path: str, rows: list[list[str]]) -> None:
+    """Flatten nested VERIS JSON into table rows."""
+    if isinstance(value, dict):
+        if not value:
+            rows.append([_dimension_from_path(path), path or "root", "{}"])
+            return
+        for key, subvalue in value.items():
+            subpath = f"{path}.{key}" if path else key
+            _flatten_for_table(subvalue, subpath, rows)
+        return
+
+    if isinstance(value, list):
+        if not value:
+            rows.append([_dimension_from_path(path), path or "root", "[]"])
+            return
+        # Keep scalar lists compact in one row.
+        if all(not isinstance(item, (dict, list)) for item in value):
+            rows.append([_dimension_from_path(path), path or "root", ", ".join(map(str, value))])
+            return
+        for i, subvalue in enumerate(value):
+            _flatten_for_table(subvalue, f"{path}[{i}]", rows)
+        return
+
+    rows.append([_dimension_from_path(path), path or "root", str(value)])
+
+
+def _classification_rows_from_json(raw_json: str) -> list[list[str]]:
+    """Build table rows from classifier JSON output string."""
+    if not raw_json.strip():
+        return []
+    try:
+        parsed = json.loads(raw_json)
+    except Exception:
+        return [["Error", "raw_output", raw_json]]
+
+    rows: list[list[str]] = []
+    _flatten_for_table(parsed, "", rows)
+    return rows
+
+
+def _validation_summary_markdown(raw_json: str) -> str:
+    """Build validation summary for the classification output."""
+    try:
+        parsed = json.loads(raw_json)
+    except Exception:
+        return ""
+
+    if not isinstance(parsed, dict) or parsed.get("error"):
+        return "**Validation:** Skipped."
+
+    result = validate_classification(parsed)
+    lines = [f"**Validation:** {'Passed' if result.valid else 'Issues found'}"]
+    if result.errors:
+        lines.append("**Errors**")
+        lines.extend(f"- {err}" for err in result.errors[:8])
+        if len(result.errors) > 8:
+            lines.append(f"- ... {len(result.errors) - 8} more")
+    if result.warnings:
+        lines.append("**Warnings**")
+        lines.extend(f"- {warn}" for warn in result.warnings[:8])
+        if len(result.warnings) > 8:
+            lines.append(f"- ... {len(result.warnings) - 8} more")
+    return "\n".join(lines)
+
+
+def _filter_classification_rows(
+    rows: list[list[str]],
+    dimension_filter: str,
+    errors_only: bool,
+) -> list[list[str]]:
+    """Filter table rows by dimension and optionally error-only rows."""
+    filtered: list[list[str]] = []
+    for row in rows:
+        if len(row) != 3:
+            continue
+        dimension, field, value = row
+
+        if dimension_filter != "All" and dimension != dimension_filter:
+            continue
+
+        if errors_only:
+            blob = f"{dimension} {field} {value}".lower()
+            if "error" not in blob:
+                continue
+
+        filtered.append(row)
+    return filtered
+
+
+def _render_classification_output(
+    raw_json: str,
+    output_format: str,
+    all_rows: list[list[str]],
+    dimension_filter: str,
+    errors_only: bool,
+):
+    """Render classification as JSON code or filtered table."""
+    filtered_rows = _filter_classification_rows(all_rows, dimension_filter, errors_only)
+    show_table = output_format == "Table"
+
+    if show_table:
+        return (
+            gr.update(value=raw_json, visible=False),
+            gr.update(value=filtered_rows, visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True, interactive=bool(filtered_rows)),
+        )
+
+    return (
+        gr.update(value=raw_json, visible=True),
+        gr.update(value=[], visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False, interactive=False),
+    )
+
+
+def _apply_table_filters(
+    all_rows: list[list[str]],
+    dimension_filter: str,
+    errors_only: bool,
+):
+    """Apply table-only filters without re-running inference."""
+    filtered_rows = _filter_classification_rows(all_rows, dimension_filter, errors_only)
+    return (
+        gr.update(value=filtered_rows),
+        gr.update(interactive=bool(filtered_rows)),
+    )
+
+
+def _build_filtered_csv(
+    all_rows: list[list[str]],
+    dimension_filter: str,
+    errors_only: bool,
+):
+    """Create downloadable CSV file for filtered rows."""
+    filtered_rows = _filter_classification_rows(all_rows, dimension_filter, errors_only)
+    if not filtered_rows:
+        return gr.update(value=None, visible=False)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".csv",
+        delete=False,
+        newline="",
+        encoding="utf-8",
+    ) as tmp:
+        writer = csv.writer(tmp)
+        writer.writerow(["Dimension", "Field", "Value"])
+        writer.writerows(filtered_rows)
+        csv_path = tmp.name
+
+    return gr.update(value=csv_path, visible=True)
+
+
+def classify_and_render(
+    description: str,
+    api_key: str,
+    output_format: str,
+    dimension_filter: str,
+    errors_only: bool,
+    request: gr.Request | None = None,
+    profile: gr.OAuthProfile | None = None,
+):
+    """Run classification and return display-ready outputs."""
+    raw_json = classify(description, api_key, request=request, profile=profile)
+    all_rows = _classification_rows_from_json(raw_json)
+    validation_md = _validation_summary_markdown(raw_json)
+    code_update, table_update, controls_update, export_btn_update = _render_classification_output(
+        raw_json,
+        output_format,
+        all_rows,
+        dimension_filter,
+        errors_only,
+    )
+    return (
+        raw_json,
+        all_rows,
+        validation_md,
+        code_update,
+        table_update,
+        controls_update,
+        export_btn_update,
+        gr.update(value=None, visible=False),
+    )
+
+
 # ---------------------------------------------------------------------------
 # GPU-decorated functions for ZeroGPU
 # ---------------------------------------------------------------------------
 
+def _gpu_wrapper(duration: int):
+    """Use HF ZeroGPU decorator when available; otherwise no-op."""
+
+    def passthrough(fn):
+        return fn
+
+    if IS_SPACES and spaces is not None and hasattr(spaces, "GPU"):
+        return spaces.GPU(duration=duration)
+    return passthrough
+
+
 if IS_SPACES:
-    @spaces.GPU(duration=120)
+    @_gpu_wrapper(duration=120)
     def _classify_gpu(description: str) -> dict:
         """Classify incident using the fine-tuned model on ZeroGPU."""
         return classify_incident(description=description, use_hf=True)
 
-    @spaces.GPU(duration=120)
+    @_gpu_wrapper(duration=120)
     def _ask_gpu(question: str) -> str:
         """Answer question using the fine-tuned model on ZeroGPU."""
         return answer_question(question=question, use_hf=True)
@@ -422,6 +815,7 @@ def build_app() -> gr.Blocks:
         theme=THEME,
         css=CUSTOM_CSS,
     ) as app:
+        session_status = None
 
         # --- Hero Header ---
         gr.HTML("""
@@ -488,6 +882,24 @@ def build_app() -> gr.Blocks:
                 </span>
             </div>
             """)
+            with gr.Row():
+                gr.Markdown(
+                    "**Required:** Log in with Hugging Face so ZeroGPU usage "
+                    "counts against your account quota."
+                )
+                login_btn = gr.LoginButton("Sign in with Hugging Face")
+                # Gradio 4.44 can miss auto-activation in some Spaces contexts.
+                login_btn.activate()
+                gr.HTML(
+                    f'<a href="{SPACE_HOST_URL}/login/huggingface" target="_top" '
+                    'style="display:inline-block;padding:10px 14px;border-radius:8px;'
+                    'border:1px solid #334155;color:#cbd5e1;text-decoration:none;font-weight:600;">'
+                    "Direct sign-in (if button refreshes)</a>"
+                )
+            session_status = gr.Markdown(
+                value="**Session status:** Checking...",
+                elem_classes=["status-card"],
+            )
         else:
             gr.HTML("""
             <div class="model-banner">
@@ -503,17 +915,20 @@ def build_app() -> gr.Blocks:
             </div>
             """)
 
-        # --- API Key (optional on Spaces) ---
-        with gr.Group():
-            api_key = gr.Textbox(
-                label="OpenAI API Key (Optional)" if IS_SPACES else "OpenAI API Key",
-                placeholder="sk-... (optional — the fine-tuned model runs for free)" if IS_SPACES else "sk-... (required for classification)",
-                type="password",
-                info="Your key is never stored. If provided, GPT-4o will be used instead of the fine-tuned model.",
-            )
+        # --- API Key (local mode only) ---
+        if IS_SPACES:
+            api_key = gr.State("")
+        else:
+            with gr.Group():
+                api_key = gr.Textbox(
+                    label="OpenAI API Key",
+                    placeholder="sk-... (required for OpenAI fallback)",
+                    type="password",
+                    info="Your key is never stored.",
+                )
 
         # --- Main Tabs ---
-        with gr.Tabs() as tabs:
+        with gr.Tabs():
 
             # ---- TAB 1: Classify ----
             with gr.TabItem("Classify Incident", id="classify"):
@@ -536,11 +951,55 @@ def build_app() -> gr.Blocks:
                         )
 
                     with gr.Column(scale=1):
+                        output_format = gr.Radio(
+                            choices=["JSON", "Table"],
+                            value="JSON",
+                            label="Output Format",
+                            info="Switch between raw JSON and a flattened table view.",
+                        )
+                        last_classification_raw = gr.State("")
+                        classification_rows = gr.State([])
+                        validation_output = gr.Markdown(
+                            label="Validation",
+                            value="*Validation summary will appear after classification.*",
+                        )
                         classification_output = gr.Code(
                             label="VERIS Classification (JSON)",
                             language="json",
                             lines=20,
                             elem_classes=["code-output"],
+                        )
+                        with gr.Row(visible=False, elem_id="table-controls") as table_controls:
+                            dimension_filter = gr.Dropdown(
+                                choices=["All", "Actor", "Action", "Asset", "Attribute", "Error", "General"],
+                                value="All",
+                                label="Filter Dimension",
+                            )
+                            errors_only = gr.Checkbox(
+                                value=False,
+                                label="Errors Only",
+                            )
+                            export_csv_btn = gr.Button(
+                                "Generate CSV",
+                                size="sm",
+                                interactive=False,
+                                visible=False,
+                            )
+                        csv_file = gr.File(
+                            label="Download Filtered CSV",
+                            visible=False,
+                            interactive=False,
+                        )
+                        classification_table = gr.Dataframe(
+                            headers=["Dimension", "Field", "Value"],
+                            datatype=["str", "str", "str"],
+                            row_count=(0, "dynamic"),
+                            col_count=(3, "fixed"),
+                            visible=False,
+                            interactive=False,
+                            wrap=True,
+                            max_height=500,
+                            label="VERIS Classification (Table)",
                         )
 
                 gr.HTML('<div style="margin-top: 20px;"><div class="section-header">Try an Example</div></div>')
@@ -552,9 +1011,44 @@ def build_app() -> gr.Blocks:
                 )
 
                 classify_btn.click(
-                    fn=classify,
-                    inputs=[incident_input, api_key],
-                    outputs=classification_output,
+                    fn=classify_and_render,
+                    inputs=[incident_input, api_key, output_format, dimension_filter, errors_only],
+                    outputs=[
+                        last_classification_raw,
+                        classification_rows,
+                        validation_output,
+                        classification_output,
+                        classification_table,
+                        table_controls,
+                        export_csv_btn,
+                        csv_file,
+                    ],
+                )
+                output_format.change(
+                    fn=_render_classification_output,
+                    inputs=[
+                        last_classification_raw,
+                        output_format,
+                        classification_rows,
+                        dimension_filter,
+                        errors_only,
+                    ],
+                    outputs=[classification_output, classification_table, table_controls, export_csv_btn],
+                )
+                dimension_filter.change(
+                    fn=_apply_table_filters,
+                    inputs=[classification_rows, dimension_filter, errors_only],
+                    outputs=[classification_table, export_csv_btn],
+                )
+                errors_only.change(
+                    fn=_apply_table_filters,
+                    inputs=[classification_rows, dimension_filter, errors_only],
+                    outputs=[classification_table, export_csv_btn],
+                )
+                export_csv_btn.click(
+                    fn=_build_filtered_csv,
+                    inputs=[classification_rows, dimension_filter, errors_only],
+                    outputs=[csv_file],
                 )
 
             # ---- TAB 2: Q&A ----
@@ -706,6 +1200,13 @@ def build_app() -> gr.Blocks:
             <a href="https://github.com/vz-risk/VCDB">VCDB</a>
         </div>
         """)
+
+        if IS_SPACES and session_status is not None:
+            app.load(
+                fn=_session_status_markdown,
+                outputs=[session_status],
+                queue=False,
+            )
 
     return app
 
