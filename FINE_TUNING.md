@@ -58,7 +58,6 @@ Both datasets were combined into a unified chat-format JSONL:
 
 | Model | Params | Pros | Cons |
 |-------|--------|------|------|
-| Qwen2.5-7B-Instruct | 7B | Strong structured output, ChatML | Chinese company (Alibaba) |
 | Llama-3.1-8B-Instruct | 8B | Most popular, huge community | Gated model (requires Meta license approval) |
 | **Mistral-7B-Instruct-v0.3** | **7B** | **Apache 2.0, great JSON output, no gating** | **Slightly older than Llama 3.1** |
 | Gemma 2-9B-IT | 9B | Strong benchmarks | Slightly larger, tighter license |
@@ -69,8 +68,6 @@ Mistral-7B-Instruct-v0.3 was chosen because:
 - **Same 7B size** — fits on A10G GPU with 4-bit quantization (QLoRA)
 - **Well-supported** in transformers/trl/peft ecosystem
 - **French company** (Mistral AI) — independent from Chinese and US big tech
-
-**Note:** v1 of the classifier used Qwen2.5-7B-Instruct. We switched to Mistral for licensing transparency — no data privacy concerns with open-weight models (all inference runs locally), but having a fully open license simplifies things.
 
 ## 3. Training Configuration
 

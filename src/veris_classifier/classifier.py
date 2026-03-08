@@ -7,6 +7,7 @@ Supports two backends:
 
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,10 @@ QA_SYSTEM_PROMPT = (
     "You are a VERIS (Vocabulary for Event Recording and Incident Sharing) expert. "
     "Answer questions about the VERIS framework accurately and thoroughly. "
     "Reference specific VERIS terminology, enumeration values, and concepts. "
-    "Be helpful and educational."
+    "Be helpful and educational. "
+    "Answer only the user's question. "
+    "Do not ask follow-up questions. "
+    "Do not append additional Q&A prompts."
 )
 
 # ── HF Model Backend ─────────────────────────────────────────────────────
@@ -168,6 +172,15 @@ def _parse_json_response(raw: str) -> dict:
     raise json.JSONDecodeError("No JSON object found in model output", text, 0)
 
 
+def _clean_qa_response(answer: str) -> str:
+    """Remove model-appended follow-up question chains from QA output."""
+    text = answer.strip()
+    match = re.search(r"(?:\n|[.!?]\s+)(What|How|Why|When|Where|Who)\b", text)
+    if match and match.start() > 0:
+        text = text[: match.start()].rstrip()
+    return text
+
+
 # ── Public API ────────────────────────────────────────────────────────────
 
 
@@ -228,10 +241,16 @@ def answer_question(
     ]
 
     if use_hf:
-        return _generate_hf(messages, max_new_tokens=800)
+        raw = _generate_hf_with_options(
+            messages,
+            max_new_tokens=320,
+            do_sample=False,
+        )
+        return _clean_qa_response(raw)
     else:
         if client is None:
             raise ValueError("OpenAI client required when use_hf=False")
-        return _generate_openai(
+        raw = _generate_openai(
             client, messages, model=model, temperature=0.3, max_tokens=800
         )
+        return _clean_qa_response(raw)
