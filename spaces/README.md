@@ -42,5 +42,5 @@ Classify incident descriptions into VERIS using a fine-tuned Mistral-7B model.
 - Live Space: https://huggingface.co/spaces/vibesecurityguy/veris-classifier
 - Model: https://huggingface.co/vibesecurityguy/veris-classifier-v2
 - Training dataset: https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training
-- Source code: https://github.com/pshamoon/veris-classifier
+- Source code: https://github.com/petershamoon/veris-classifier
 - VERIS framework: https://verisframework.org/

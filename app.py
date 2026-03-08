@@ -1194,7 +1194,7 @@ def build_app() -> gr.Blocks:
         <div class="footer">
             Fine-tuned Mistral-7B-Instruct &middot; VERIS Framework &middot; VCDB &middot; QLoRA
             <br>
-            <a href="https://github.com/pshamoon/veris-classifier">Source Code</a> &middot;
+            <a href="https://github.com/petershamoon/veris-classifier">Source Code</a> &middot;
             <a href="https://huggingface.co/vibesecurityguy/veris-classifier-v2">Model</a> &middot;
             <a href="https://verisframework.org/">VERIS Docs</a> &middot;
             <a href="https://github.com/vz-risk/VCDB">VCDB</a>

@@ -67,7 +67,7 @@ Important:
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/pshamoon/veris-classifier.git
+git clone https://github.com/petershamoon/veris-classifier.git
 cd veris-classifier
 python -m venv .venv
 source .venv/bin/activate

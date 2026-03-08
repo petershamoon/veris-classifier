@@ -313,5 +313,5 @@ Random seeds are fixed (42) for dataset shuffling and evaluation sampling.
 - **Live Demo:** [huggingface.co/spaces/vibesecurityguy/veris-classifier](https://huggingface.co/spaces/vibesecurityguy/veris-classifier)
 - **Model:** [huggingface.co/vibesecurityguy/veris-classifier-v2](https://huggingface.co/vibesecurityguy/veris-classifier-v2)
 - **Training Data:** [huggingface.co/datasets/vibesecurityguy/veris-classifier-training](https://huggingface.co/datasets/vibesecurityguy/veris-classifier-training)
-- **Source Code:** [github.com/pshamoon/veris-classifier](https://github.com/pshamoon/veris-classifier)
+- **Source Code:** [github.com/petershamoon/veris-classifier](https://github.com/petershamoon/veris-classifier)
 - **VERIS Framework:** [verisframework.org](https://verisframework.org/)
