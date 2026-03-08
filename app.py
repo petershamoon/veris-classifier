@@ -1148,6 +1148,12 @@ def build_app() -> gr.Blocks:
                         plus 300+ VERIS Q&A pairs. The model was fine-tuned using QLoRA (4-bit quantization)
                         and runs for free on Hugging Face ZeroGPU.
                     </p>
+                    <p style="color: #94a3b8; line-height: 1.7; margin-top: 10px;">
+                        <strong style="color: #e2e8f0;">Model clarity:</strong> Production inference is
+                        <strong style="color: #e2e8f0;">Mistral-only</strong> (base:
+                        <code>mistralai/Mistral-7B-Instruct-v0.3</code> + LoRA adapter
+                        <code>vibesecurityguy/veris-classifier-v2</code>). This app does not use Qwen.
+                    </p>
                     <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
                         <a href="https://verisframework.org/" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 8px 16px; color: #60a5fa; text-decoration: none; font-size: 0.9rem;">VERIS Framework</a>
                         <a href="https://github.com/vz-risk/VCDB" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 8px 16px; color: #a78bfa; text-decoration: none; font-size: 0.9rem;">VCDB GitHub</a>
